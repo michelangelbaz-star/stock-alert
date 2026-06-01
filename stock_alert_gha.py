@@ -18,7 +18,7 @@ THRESHOLD      = 0.005   # 0.5%
 
 STOCKS = {
     "BAMI.MI": "Banco BPM",
-    "CNHI.MI": "CNH Industrial",
+    "CNH.MI": "CNH Industrial",
     "PRT.MI":  "Esprinet",
     "AMP.MI":  "Amplifon",
 }
