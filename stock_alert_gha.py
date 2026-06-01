@@ -4,7 +4,7 @@ Stock Alert — versione GitHub Actions
 Eseguito ogni 5 minuti dal workflow .github/workflows/stock_alert.yml
 Credenziali lette da variabili d'ambiente (GitHub Secrets).
 """
-
+# v1.1
 import os, json, re, requests, feedparser
 import yfinance as yf
 from datetime import datetime, date, time as dt_time
