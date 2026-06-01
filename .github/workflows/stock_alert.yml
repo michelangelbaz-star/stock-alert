@@ -33,7 +33,7 @@ jobs:
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
-        run: python .github/workflows/stock_alert_gha.py
+        run: python stock_alert_gha.py
 
       - name: Salva stato aggiornato
         uses: actions/cache@v4
