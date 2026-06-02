@@ -247,12 +247,13 @@ def main():
         log(f"{ticker}: €{cur:.3f}  ref=€{ref:.3f}  Δ={change_pct:+.3f}%")
 
         if abs(change_pct) >= 0.5:
-            log(f"ALERT {ticker}: {change_pct:+.2f}%")
-            arts             = get_news(name)
-            change_from_open = ((cur - op) / op) * 100
-            send_telegram(format_alert(ticker, name, op, cur, change_from_open, arts))
-            state[f"{ticker}_ref"] = cur
-            save_state(state)
+    log(f"ALERT {ticker}: {change_pct:+.2f}%")
+    arts             = get_news(name)
+    change_from_open = ((cur - op) / op) * 100
+    send_telegram(format_alert(ticker, name, op, cur, change_from_open, arts))
+
+state[f"{ticker}_ref"] = cur
+save_state(state)
 
     log("Check completato.")
 
