@@ -117,7 +117,7 @@ def forecast_and_advice(change_pct, current, arts):
     return fcast, azione, monitor
 
 
-def format_alert(ticker, name, open_p, current, change_pct, arts):
+def format_alert(ticker, name, open_p, current, change_pct, arts, ref=None):
     sign   = "+" if change_pct >= 0 else ""
     arrow  = "📈" if change_pct >= 0 else "📉"
     colore = "🟢" if change_pct >= 0 else "🔴"
@@ -127,9 +127,12 @@ def format_alert(ticker, name, open_p, current, change_pct, arts):
     now_str = datetime.now(ROME_TZ).strftime("%H:%M")
     fcast, azione, monitor = forecast_and_advice(change_pct, current, arts)
     syn = news_summary(arts)
-
     msg  = f"{SEP}\n🏦  <b>{name.upper()}</b>\n     <code>{ticker}</code>\n{SEP}\n\n"
     msg += f"{arrow}  <b>ALERT  {sign}{change_pct:.2f}%</b>  ·  {now_str}\n\n"
+    if ref is not None:
+        change_5 = ((current - ref) / ref) * 100
+        sign_5   = "+" if change_5 >= 0 else ""
+        msg += f"  ⏱ Ultimi 5 min:  €{ref:.3f}  →  €{current:.3f}  ({sign_5}{change_5:.2f}%)\n"
     msg += f"  Apertura        Attuale\n"
     msg += f"  €{open_p:.3f}  →  <b>€{current:.3f}</b>  {tri}\n\n"
     msg += f"  {colore}  <b>{sign}{change_pct:.2f}%</b>   <b>{sign}€{diff:.3f}</b>\n\n"
@@ -250,7 +253,7 @@ def main():
             log(f"ALERT {ticker}: {change_pct:+.2f}%")
             arts             = get_news(name)
             change_from_open = ((cur - op) / op) * 100
-            send_telegram(format_alert(ticker, name, op, cur, change_from_open, arts))
+            send_telegram(format_alert(ticker, name, op, cur, change_from_open, arts, ref=ref))
 
         state[f"{ticker}_ref"] = cur
         save_state(state)
