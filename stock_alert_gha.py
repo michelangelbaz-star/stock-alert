@@ -146,7 +146,8 @@ def format_alert(ticker, name, open_p, current, high, low, change_daily, change_
     
     # Costruzione del messaggio Telegram
     msg  = f"{SEP}\n🏦  <b>{name.upper()}</b>\n     <code>{ticker}</code>\n{SEP}\n\n"
-    msg += f"{arrow_5}  <b>ALERT 5 MIN: {sign_5}{change_5m:.2f}%</b>\n\n"
+    colore_5 = "🟢" if change_5m >= 0 else "🔴"
+    msg += f"{arrow_5} {colore_5}  <b>ALERT 5 MIN: {sign_5}{change_5m:.2f}%</b>\n\n"
     
     # Colonne Orario e Prezzo
     msg += f"🕒 <b>{time_5m_str}</b> (5 min fa)         🕒 <b>{time_now_str}</b> (Adesso)\n"
@@ -158,7 +159,8 @@ def format_alert(ticker, name, open_p, current, high, low, change_daily, change_
     # Sezione Giornaliera
     msg += f"{arrow_d}  <b>Performance Giornaliera: {sign_d}{change_daily:.2f}%</b>\n"
     msg += f"  Apertura: €{open_p:.3f}  ·  Max: €{high:.3f}  ·  Min: €{low:.3f}\n"
-    msg += f"  {colore}  Delta odierno: <b>{sign_d}€{diff_d:.3f}</b>\n\n"
+    colore_d = "🟢" if change_daily >= 0 else "🔴"
+    msg += f"  {colore_d}  Delta odierno: <b>{sign_d}€{diff_d:.3f}</b>\n\n"
     
     msg += f"{SEP}\n📰  NOTIZIE IN TEMPO REALE\n{SEP}\n\n<i>{syn}</i>\n\n"
     for a in arts[:3]:
