@@ -222,6 +222,14 @@ def main():
         log("Fuori orario di borsa — nessuna azione.")
         return
 
+    # Aspetta il secondo :55 del minuto per dati più stabili
+    now = datetime.now(ROME_TZ)
+    secondi_attesa = (55 - now.second) % 60
+    if secondi_attesa > 0:
+        log(f"Attendo {secondi_attesa}s per dati stabili...")
+        import time
+        time.sleep(secondi_attesa)
+    
     if dt_time(17, 35) <= t < dt_time(17, 40):
         log("Invio riepilogo fine giornata...")
         results = []
