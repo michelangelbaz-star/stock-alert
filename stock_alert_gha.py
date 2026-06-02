@@ -1,19 +1,17 @@
 #!/usr/bin/env python3
 """
-Stock Alert — versione GitHub Actions
-Eseguito ogni 5 minuti dal workflow .github/workflows/stock_alert.yml
-Credenziali lette da variabili d'ambiente (GitHub Secrets).
+Stock Alert — Versione 2.2 Stateless (GitHub Actions)
+Layout con Delta monetario (€) dei 5 minuti posizionato sotto le colonne.
 """
-# v1.1
+
 import os, json, re, requests, feedparser
 import yfinance as yf
-from datetime import datetime, date, time as dt_time
+from datetime import datetime, date, timedelta, time as dt_time
 import pytz
 
 # ─── CONFIGURAZIONE ────────────────────────────────────────
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
 CHAT_ID        = os.environ["CHAT_ID"]
-STATE_FILE     = "stock_state.json"
 THRESHOLD      = 0.005   # 0.5%
 
 STOCKS = {
@@ -51,14 +49,21 @@ def get_price(ticker):
     try:
         hist = yf.Ticker(ticker).history(period="1d", interval="1m")
         if hist.empty:
-            return None, None, None, None
-        return (round(float(hist["Close"].iloc[-1]), 4),
-                round(float(hist["Open"].iloc[0]),  4),
-                round(float(hist["High"].max()),     4),
-                round(float(hist["Low"].min()),      4))
+            return None, None, None, None, None
+            
+        current = round(float(hist["Close"].iloc[-1]), 4)
+        open_p  = round(float(hist["Open"].iloc[0]),  4)
+        high    = round(float(hist["High"].max()),     4)
+        low     = round(float(hist["Low"].min()),      4)
+        
+        # Recupera il prezzo di circa 5 minuti fa (-6 index nel dataframe a 1m)
+        idx_5min = max(-6, -len(hist))
+        ref_5min = round(float(hist["Close"].iloc[idx_5min]), 4)
+        
+        return current, open_p, high, low, ref_5min
     except Exception as e:
         log(f"Price error {ticker}: {e}")
-        return None, None, None, None
+        return None, None, None, None, None
 
 
 def get_news(company):
@@ -117,25 +122,44 @@ def forecast_and_advice(change_pct, current, arts):
     return fcast, azione, monitor
 
 
-def format_alert(ticker, name, open_p, current, change_pct, arts, ref=None):
-    sign   = "+" if change_pct >= 0 else ""
-    arrow  = "📈" if change_pct >= 0 else "📉"
-    colore = "🟢" if change_pct >= 0 else "🔴"
-    tri    = "▲" if change_pct >= 0 else "▼"
-    diff   = current - open_p
-    icona  = "✅" if change_pct >= 0 else "⚠️"
-    now_str = datetime.now(ROME_TZ).strftime("%H:%M")
-    fcast, azione, monitor = forecast_and_advice(change_pct, current, arts)
+def format_alert(ticker, name, open_p, current, high, low, change_daily, change_5m, arts, ref):
+    sign_5  = "+" if change_5m >= 0 else ""
+    colore  = "🟢" if change_5m >= 0 else "🔴"
+    arrow_5 = "⚡️"
+    
+    # Calcolo delta monetario 5 minuti
+    diff_5m   = current - ref
+    sign_5m_d = "+" if diff_5m >= 0 else ""
+    
+    sign_d  = "+" if change_daily >= 0 else ""
+    arrow_d = "📈" if change_daily >= 0 else "📉"
+    diff_d  = current - open_p
+    icona   = "✅" if change_daily >= 0 else "⚠️"
+    
+    # Orari (Adesso e 5 minuti fa)
+    now = datetime.now(ROME_TZ)
+    time_now_str = now.strftime("%H:%M")
+    time_5m_str  = (now - timedelta(minutes=5)).strftime("%H:%M")
+    
+    fcast, azione, monitor = forecast_and_advice(change_daily, current, arts)
     syn = news_summary(arts)
+    
+    # Costruzione del messaggio Telegram
     msg  = f"{SEP}\n🏦  <b>{name.upper()}</b>\n     <code>{ticker}</code>\n{SEP}\n\n"
-    msg += f"{arrow}  <b>ALERT  {sign}{change_pct:.2f}%</b>  ·  {now_str}\n\n"
-    if ref is not None:
-        change_5 = ((current - ref) / ref) * 100
-        sign_5   = "+" if change_5 >= 0 else ""
-        msg += f"  ⏱ Ultimi 5 min:  €{ref:.3f}  →  €{current:.3f}  ({sign_5}{change_5:.2f}%)\n"
-    msg += f"  Apertura        Attuale\n"
-    msg += f"  €{open_p:.3f}  →  <b>€{current:.3f}</b>  {tri}\n\n"
-    msg += f"  {colore}  <b>{sign}{change_pct:.2f}%</b>   <b>{sign}€{diff:.3f}</b>\n\n"
+    msg += f"{arrow_5}  <b>ALERT 5 MIN: {sign_5}{change_5m:.2f}%</b>\n\n"
+    
+    # Colonne Orario e Prezzo
+    msg += f"🕒 <b>{time_5m_str}</b> (5 min fa)         🕒 <b>{time_now_str}</b> (Adesso)\n"
+    msg += f"💶 €{ref:.3f}                    💶 <b>€{current:.3f}</b>\n"
+    
+    # Nuova riga con il delta monetario flash
+    msg += f"💰 Spostamento flash: <b>{sign_5m_d}€{diff_5m:.3f}</b>\n\n"
+    
+    # Sezione Giornaliera
+    msg += f"{arrow_d}  <b>Performance Giornaliera: {sign_d}{change_daily:.2f}%</b>\n"
+    msg += f"  Apertura: €{open_p:.3f}  ·  Max: €{high:.3f}  ·  Min: €{low:.3f}\n"
+    msg += f"  {colore}  Delta odierno: <b>{sign_d}€{diff_d:.3f}</b>\n\n"
+    
     msg += f"{SEP}\n📰  NOTIZIE IN TEMPO REALE\n{SEP}\n\n<i>{syn}</i>\n\n"
     for a in arts[:3]:
         t = a["title"][:80] + ("…" if len(a["title"])>80 else "")
@@ -143,6 +167,7 @@ def format_alert(ticker, name, open_p, current, change_pct, arts, ref=None):
         if a["summary"]:
             msg += f"  <i>{a['summary'][:120]}{'…' if len(a['summary'])>120 else ''}</i>\n"
         msg += f"  <a href='{a['link']}'>→ {a['source'] or 'Fonte'}</a>\n\n"
+        
     msg += f"{SEP}\n🔮  PREVISIONE CHIUSURA\n{SEP}\n\n{fcast}\n\n"
     msg += f"{SEP}\n{icona}  CONSIGLIO\n{SEP}\n\n<b>{azione}</b>\n\n"
     msg += f"📌 <i>Tieni d'occhio: {monitor}</i>"
@@ -183,80 +208,46 @@ def format_eod(results):
     return msg
 
 
-def load_state():
-    if os.path.exists(STATE_FILE):
-        try:
-            with open(STATE_FILE) as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {}
-
-
-def save_state(state):
-    with open(STATE_FILE, "w") as f:
-        json.dump(state, f, indent=2)
-
-
 def main():
     now   = datetime.now(ROME_TZ)
     t     = now.time()
-    today = date.today().isoformat()
 
     log(f"=== Check delle {now.strftime('%H:%M')} ===")
 
-    # Weekend: esci
     if now.weekday() >= 5:
         log("Weekend — nessuna azione.")
         return
 
-    # Fuori orario: esci
     if not (dt_time(9, 0) <= t <= dt_time(17, 45)):
         log("Fuori orario di borsa — nessuna azione.")
         return
 
-    state = load_state()
-
-    # Reset per nuovo giorno
-    if state.get("date") != today:
-        log(f"Nuovo giorno: {today}")
-        state = {"date": today}
-        save_state(state)
-
-    # Riepilogo fine giornata
-    if dt_time(17, 35) <= t <= dt_time(17, 45):
-        if not state.get("eod_sent"):
-            log("Invio riepilogo fine giornata...")
-            results = []
-            for ticker, name in STOCKS.items():
-                cur, op, hi, lo = get_price(ticker)
-                if cur and op:
-                    results.append((ticker, name, op, cur, hi, lo))
-            if results:
-                send_telegram(format_eod(results))
-            state["eod_sent"] = True
-            save_state(state)
+    if dt_time(17, 35) <= t < dt_time(17, 40):
+        log("Invio riepilogo fine giornata...")
+        results = []
+        for ticker, name in STOCKS.items():
+            cur, op, hi, lo, _ = get_price(ticker)
+            if cur and op:
+                results.append((ticker, name, op, cur, hi, lo))
+        if results:
+            send_telegram(format_eod(results))
         return
 
-    # Check prezzi intraday
     for ticker, name in STOCKS.items():
-        cur, op, hi, lo = get_price(ticker)
+        cur, op, hi, lo, ref = get_price(ticker)
         if cur is None:
             log(f"Nessun dato per {ticker}")
             continue
 
-        ref        = state.get(f"{ticker}_ref", op)
-        change_pct = ((cur - ref) / ref) * 100
-        log(f"{ticker}: €{cur:.3f}  ref=€{ref:.3f}  Δ={change_pct:+.3f}%")
+        change_5m = ((cur - ref) / ref) * 100
+        log(f"{ticker}: €{cur:.3f}  ref_5m=€{ref:.3f}  Δ5m={change_5m:+.3f}%")
 
-        if abs(change_pct) >= 0.5:
-            log(f"ALERT {ticker}: {change_pct:+.2f}%")
-            arts             = get_news(name)
-            change_from_open = ((cur - op) / op) * 100
-            send_telegram(format_alert(ticker, name, op, cur, change_from_open, arts, ref=ref))
-
-        state[f"{ticker}_ref"] = cur
-        save_state(state)
+        if abs(change_5m) >= 0.5:
+            log(f"ALERT ATTIVATO {ticker}: {change_5m:+.2f}% negli ultimi 5 min")
+            arts = get_news(name)
+            change_daily = ((cur - op) / op) * 100
+            
+            send_telegram(format_alert(ticker, name, op, cur, hi, lo, change_daily, change_5m, arts, ref))
 
     log("Check completato.")
 
